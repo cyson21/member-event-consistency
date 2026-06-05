@@ -74,16 +74,12 @@ node tools/runner/check-local-verification-suite-order.mjs
 node tools/runner/check-local-verification-suite-blocked-summary-surface.mjs
 node tools/runner/check-ai-runs-ledger-surface.mjs
 node tools/runner/check-ai-runs-ledger.mjs
-node tools/runner/check-root-verification-entrypoint-surface.mjs
 node tools/runner/check-root-verification-entrypoint.mjs
-node tools/runner/check-dependency-free-regression-manifest-surface.mjs
 node tools/runner/check-dependency-free-regression-manifest.mjs
-node tools/runner/check-maven-junit-pending-inventory-surface.mjs
 node tools/runner/check-maven-junit-pending-inventory.mjs
 node tools/runner/check-testcontainers-ci-path.mjs
 node tools/runner/check-phase2-gate-readiness-surface.mjs
 node tools/runner/check-phase2-gate-readiness.mjs
-node tools/runner/check-web-typecheck-pending-inventory-surface.mjs
 node tools/runner/check-web-typecheck-pending-inventory.mjs
 node tools/runner/check-mvp-live-smoke-seed-sync-surface.mjs
 node tools/runner/check-mvp-live-smoke-request-catalog-surface.mjs

@@ -1,26 +1,23 @@
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptDir, '../..');
-const ledgerRoot = join(repoRoot, '.ai-runs');
+const index = JSON.parse(readFileSync(join(repoRoot, 'docs/internal/ai-runs-index.json'), 'utf8'));
 const tracking = readFileSync(join(repoRoot, 'docs/project-tracking.md'), 'utf8');
+
+if (index.archivedFrom !== '.ai-runs/') {
+  throw new Error('AI runs index must record archivedFrom: .ai-runs/');
+}
 
 const missing = [];
 const checked = [];
 
-for (const entry of readdirSync(ledgerRoot).sort()) {
-  if (entry === 'templates') {
-    continue;
-  }
-  const runDir = join(ledgerRoot, entry);
-  if (!statSync(runDir).isDirectory()) {
-    continue;
-  }
-  checked.push(entry);
-  if (!tracking.includes(`.ai-runs/${entry}/`)) {
-    missing.push(entry);
+for (const run of index.runs ?? []) {
+  checked.push(run.id);
+  if (!tracking.includes(run.trackingRef)) {
+    missing.push(run.id);
   }
 }
 

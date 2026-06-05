@@ -100,3 +100,4 @@ The review remediation track now prioritizes reproducible evidence over new scen
 `.github/workflows/review-remediation.yml` promotes the Docker-backed `*IT` tests into CI with an Ubuntu runner and a Docker runtime check before the Testcontainers command. The `MvpLiveInfrastructureIT` route check starts PostgreSQL, Redis, and RabbitMQ containers and only accepts RabbitMQ route evidence after actuator health is `UP`. The same workflow also runs Maven regression, dashboard typecheck, and the dependency-free regression without relying on sibling local repos.
 
 For the live Spring RabbitMQ path, queue lag and RabbitMQ latency metrics are derived from queue-event lag snapshots recorded by the run tracker. The dependency-free dashboard and SQL-recording fixtures label their local comparison values as fixture baselines, not measured queue performance.
+

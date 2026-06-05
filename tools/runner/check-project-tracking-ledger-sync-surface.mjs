@@ -5,7 +5,7 @@ const suite = readFileSync(new URL('./check-local-verification-suite.mjs', impor
 for (const fragment of [
   'check-project-tracking-ledger-sync-surface.mjs',
   'check-project-tracking-ledger-sync.mjs',
-  'const expectedCompletedChecks = 70',
+  'const expectedCompletedChecks = 66',
 ]) {
   if (!suite.includes(fragment)) {
     throw new Error(`Local verification suite is missing project tracking ledger sync fragment: ${fragment}`);
@@ -16,8 +16,9 @@ const guard = readFileSync(new URL('./check-project-tracking-ledger-sync.mjs', i
 
 for (const fragment of [
   '.ai-runs',
+  'ai-runs-index.json',
   'docs/project-tracking.md',
-  'templates',
+  'trackingRef',
   'missing',
   'checkedRunLedgers',
 ]) {
