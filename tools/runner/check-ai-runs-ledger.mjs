@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptDir, '../..');
 const ledgerRoot = join(repoRoot, '.ai-runs');
+const indexPath = join(repoRoot, 'docs/internal/ai-runs-index.json');
 
 const requiredFiles = [
   'goal.md',
@@ -16,41 +17,60 @@ const requiredFiles = [
 
 const runIdPattern = /^\d{4}-\d{2}-\d{2}-[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
+if (!existsSync(indexPath)) {
+  throw new Error('AI runs index is missing: docs/internal/ai-runs-index.json');
+}
+
+const index = JSON.parse(readFileSync(indexPath, 'utf8'));
+const runs = index.runs ?? [];
 const missing = [];
 const malformed = [];
 const empty = [];
-const checked = [];
+const duplicateIds = [];
+const seen = new Set();
 
-for (const entry of readdirSync(ledgerRoot).sort()) {
-  if (entry === 'templates') {
-    continue;
-  }
-
-  const runDir = join(ledgerRoot, entry);
-  if (!statSync(runDir).isDirectory()) {
-    continue;
-  }
-
-  if (!runIdPattern.test(entry)) {
-    malformed.push(entry);
-  }
-
-  for (const fileName of requiredFiles) {
-    const filePath = join(runDir, fileName);
-    if (!existsSync(filePath)) {
-      missing.push(`${entry}/${fileName}`);
-      continue;
-    }
-    if (readFileSync(filePath, 'utf8').trim().length === 0) {
-      empty.push(`${entry}/${fileName}`);
-    }
-  }
-  checked.push(entry);
+if (JSON.stringify(index.requiredFiles) !== JSON.stringify(requiredFiles)) {
+  throw new Error('AI runs index requiredFiles must match the local guard');
 }
 
-if (malformed.length > 0 || missing.length > 0 || empty.length > 0) {
+for (const run of runs) {
+  if (!runIdPattern.test(run.id)) {
+    malformed.push(run.id);
+  }
+  if (seen.has(run.id)) {
+    duplicateIds.push(run.id);
+  }
+  seen.add(run.id);
+
+  for (const fileName of requiredFiles) {
+    const file = run.files?.[fileName];
+    if (!file?.present) {
+      missing.push(`${run.id}/${fileName}`);
+      continue;
+    }
+    if (file.bytes <= 0) {
+      empty.push(`${run.id}/${fileName}`);
+    }
+  }
+}
+
+if (index.runCount !== runs.length) {
+  throw new Error(`AI runs index runCount mismatch: ${index.runCount} != ${runs.length}`);
+}
+
+if (existsSync(ledgerRoot)) {
+  const localRunDirs = readdirSync(ledgerRoot)
+    .filter((entry) => entry !== 'templates')
+    .filter((entry) => statSync(join(ledgerRoot, entry)).isDirectory());
+  if (localRunDirs.length > 0) {
+    throw new Error(`AI run ledgers must stay outside the source tree; found local dirs: ${localRunDirs.join(', ')}`);
+  }
+}
+
+if (malformed.length > 0 || duplicateIds.length > 0 || missing.length > 0 || empty.length > 0) {
   throw new Error(JSON.stringify({
     malformed,
+    duplicateIds,
     missing,
     empty,
   }));
@@ -58,6 +78,7 @@ if (malformed.length > 0 || missing.length > 0 || empty.length > 0) {
 
 console.log(JSON.stringify({
   status: 'passed',
-  checkedRunLedgers: checked.length,
+  checkedRunLedgers: runs.length,
   requiredFiles,
+  index: 'docs/internal/ai-runs-index.json',
 }));

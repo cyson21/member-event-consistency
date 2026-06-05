@@ -56,7 +56,7 @@ for (const fragment of [
   'check-mvp-live-smoke-preflight-base-url.mjs',
   'check-mvp-live-smoke-preflight-async-count.mjs',
   'check-mvp-live-smoke-preflight-async-route.mjs',
-  'const expectedCompletedChecks = 70',
+  'const expectedCompletedChecks = 66',
 ]) {
   if (!suite.includes(fragment)) {
     throw new Error(`Local verification suite is missing live-smoke preflight fragment: ${fragment}`);

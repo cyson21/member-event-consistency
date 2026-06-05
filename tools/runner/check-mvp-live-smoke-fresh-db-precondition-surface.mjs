@@ -16,7 +16,7 @@ for (const fragment of [
 for (const fragment of [
   'check-mvp-live-smoke-fresh-db-precondition-surface.mjs',
   'check-mvp-live-smoke-fresh-db-precondition.mjs',
-  'const expectedCompletedChecks = 70',
+  'const expectedCompletedChecks = 66',
 ]) {
   if (!suite.includes(fragment)) {
     throw new Error(`Local verification suite is missing fresh DB precondition fragment: ${fragment}`);

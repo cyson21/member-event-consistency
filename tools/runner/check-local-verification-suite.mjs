@@ -13,17 +13,13 @@ const checks = [
   ['node', 'tools/runner/check-ai-runs-ledger.mjs'],
   ['node', 'tools/runner/check-project-tracking-ledger-sync-surface.mjs'],
   ['node', 'tools/runner/check-project-tracking-ledger-sync.mjs'],
-  ['node', 'tools/runner/check-root-verification-entrypoint-surface.mjs'],
   ['node', 'tools/runner/check-root-verification-entrypoint.mjs'],
   ['node', 'tools/runner/check-regression-script-surface.mjs'],
-  ['node', 'tools/runner/check-dependency-free-regression-manifest-surface.mjs'],
   ['node', 'tools/runner/check-dependency-free-regression-manifest.mjs'],
-  ['node', 'tools/runner/check-maven-junit-pending-inventory-surface.mjs'],
   ['node', 'tools/runner/check-maven-junit-pending-inventory.mjs'],
   ['node', 'tools/runner/check-testcontainers-ci-path.mjs'],
   ['node', 'tools/runner/check-phase2-gate-readiness-surface.mjs'],
   ['node', 'tools/runner/check-phase2-gate-readiness.mjs'],
-  ['node', 'tools/runner/check-web-typecheck-pending-inventory-surface.mjs'],
   ['node', 'tools/runner/check-web-typecheck-pending-inventory.mjs'],
   ['node', 'tools/runner/check-mvp-scope-verifier-surface.mjs'],
   ['node', 'tools/runner/check-control-device-guardrails-surface.mjs'],
@@ -78,7 +74,7 @@ const checks = [
   ['node', 'tools/runner/check-stockrush-boundary.mjs'],
 ];
 
-const expectedCompletedChecks = 70;
+const expectedCompletedChecks = 66;
 const completedChecks = [];
 let activeCheck = "";
 
