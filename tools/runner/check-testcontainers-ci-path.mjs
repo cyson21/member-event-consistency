@@ -8,13 +8,13 @@ const workflowPath = resolve(repoRoot, '.github/workflows/review-remediation.yml
 const workflow = readFileSync(workflowPath, 'utf8');
 
 const requiredSnippets = [
-  'testcontainers-db-concurrency:',
+  'testcontainers-integration:',
   'runs-on: ubuntu-latest',
   'actions/checkout@v4',
   'actions/setup-java@v4',
   "java-version: '17'",
   'docker info',
-  "mvn -f backend/pom.xml -Dtest='*DbConcurrencyIT' test",
+  "mvn -f backend/pom.xml -Dtest='*IT' test",
   'standard-regression:',
   'actions/setup-node@v4',
   "node-version: '22'",
@@ -33,5 +33,5 @@ for (const snippet of requiredSnippets) {
 console.log(JSON.stringify({
   status: 'passed',
   workflow: '.github/workflows/review-remediation.yml',
-  dockerBackedTestCommand: "mvn -f backend/pom.xml -Dtest='*DbConcurrencyIT' test",
+  dockerBackedTestCommand: "mvn -f backend/pom.xml -Dtest='*IT' test",
 }));

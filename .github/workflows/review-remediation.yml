@@ -8,7 +8,7 @@ on:
       - 'feature/**'
 
 jobs:
-  testcontainers-db-concurrency:
+  testcontainers-integration:
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
@@ -26,8 +26,8 @@ jobs:
       - name: Confirm Docker runtime
         run: docker info
 
-      - name: Run Docker-backed DB concurrency tests
-        run: mvn -f backend/pom.xml -Dtest='*DbConcurrencyIT' test
+      - name: Run Docker-backed integration tests
+        run: mvn -f backend/pom.xml -Dtest='*IT' test
 
   standard-regression:
     runs-on: ubuntu-latest
