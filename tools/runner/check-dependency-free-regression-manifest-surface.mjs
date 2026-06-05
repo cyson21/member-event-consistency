@@ -5,7 +5,7 @@ const suite = readFileSync(new URL('./check-local-verification-suite.mjs', impor
 for (const fragment of [
   'check-dependency-free-regression-manifest-surface.mjs',
   'check-dependency-free-regression-manifest.mjs',
-  'const expectedCompletedChecks = 69',
+  'const expectedCompletedChecks = 70',
 ]) {
   if (!suite.includes(fragment)) {
     throw new Error(`Local verification suite is missing regression manifest fragment: ${fragment}`);

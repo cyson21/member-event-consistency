@@ -80,6 +80,7 @@ node tools/runner/check-dependency-free-regression-manifest-surface.mjs
 node tools/runner/check-dependency-free-regression-manifest.mjs
 node tools/runner/check-maven-junit-pending-inventory-surface.mjs
 node tools/runner/check-maven-junit-pending-inventory.mjs
+node tools/runner/check-testcontainers-ci-path.mjs
 node tools/runner/check-phase2-gate-readiness-surface.mjs
 node tools/runner/check-phase2-gate-readiness.mjs
 node tools/runner/check-web-typecheck-pending-inventory-surface.mjs

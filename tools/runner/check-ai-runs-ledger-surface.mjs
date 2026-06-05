@@ -4,7 +4,7 @@ const suite = readFileSync(new URL('./check-local-verification-suite.mjs', impor
 
 for (const fragment of [
   'check-ai-runs-ledger.mjs',
-  'const expectedCompletedChecks = 69',
+  'const expectedCompletedChecks = 70',
 ]) {
   if (!suite.includes(fragment)) {
     throw new Error(`Local verification suite is missing ledger guard fragment: ${fragment}`);
