@@ -1,0 +1,11 @@
+{
+  "name": "member-event-consistency",
+  "private": true,
+  "scripts": {
+    "test": "node tools/runner/check-local-verification-suite.mjs",
+    "test:readiness": "node tools/runner/check-dependency-bootstrap-readiness.mjs",
+    "test:live-smoke:preflight": "node tools/runner/check-mvp-live-smoke-preflight-readiness.mjs",
+    "test:backend:offline": "mvn -f backend/pom.xml -o test",
+    "test:web": "npm --prefix web test"
+  }
+}
