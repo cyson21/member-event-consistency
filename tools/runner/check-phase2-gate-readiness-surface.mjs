@@ -5,7 +5,7 @@ const suite = readFileSync(new URL('./check-local-verification-suite.mjs', impor
 for (const fragment of [
   'check-phase2-gate-readiness-surface.mjs',
   'check-phase2-gate-readiness.mjs',
-  'const expectedCompletedChecks = 69',
+  'const expectedCompletedChecks = 70',
 ]) {
   if (!suite.includes(fragment)) {
     throw new Error(`Local verification suite is missing Phase 2 gate readiness fragment: ${fragment}`);
