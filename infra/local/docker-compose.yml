@@ -1,0 +1,149 @@
+x-backend-common: &backend_common
+  image: ${BACKEND_IMAGE:-member-event-consistency-backend:local}
+  restart: unless-stopped
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+    rabbitmq:
+      condition: service_healthy
+  networks:
+    - mec-net
+
+x-backend-env: &backend_env
+  SPRING_PROFILES_ACTIVE: local
+  SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-member_event_consistency}
+  SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-mec}
+  SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-mec_pass}
+  SPRING_DATA_REDIS_HOST: redis
+  SPRING_RABBITMQ_HOST: rabbitmq
+  SPRING_RABBITMQ_PORT: 5672
+  SPRING_RABBITMQ_USERNAME: ${RABBITMQ_USER:-mec}
+  SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASS:-mec_rabbit}
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: mec-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-member_event_consistency}
+      POSTGRES_USER: ${POSTGRES_USER:-mec}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mec_pass}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - mec-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-mec} -d ${POSTGRES_DB:-member_event_consistency}"]
+      interval: 10s
+      timeout: 5s
+      retries: 8
+      start_period: 10s
+
+  redis:
+    image: redis:7-alpine
+    container_name: mec-redis
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - mec-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 8
+      start_period: 10s
+
+  rabbitmq:
+    image: rabbitmq:3.12-management-alpine
+    container_name: mec-rabbitmq
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-mec}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS:-mec_rabbit}
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - mec-net
+    healthcheck:
+      test: ["CMD-SHELL", "rabbitmq-diagnostics -q ping"]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 20s
+
+  api-1:
+    <<: *backend_common
+    container_name: mec-api-1
+    environment:
+      <<: *backend_env
+      APP_SERVICE_ROLE: api
+      API_INSTANCE_ID: api-1
+      # API 헬스엔드포인트가 준비되면 아래를 실제 값으로 교체
+      # API_HEALTHCHECK_PATH: /actuator/health
+
+  api-2:
+    <<: *backend_common
+    container_name: mec-api-2
+    environment:
+      <<: *backend_env
+      APP_SERVICE_ROLE: api
+      API_INSTANCE_ID: api-2
+
+  api-3:
+    <<: *backend_common
+    container_name: mec-api-3
+    environment:
+      <<: *backend_env
+      APP_SERVICE_ROLE: api
+      API_INSTANCE_ID: api-3
+
+  campaign-worker:
+    <<: *backend_common
+    container_name: mec-campaign-worker
+    environment:
+      <<: *backend_env
+      APP_SERVICE_ROLE: campaign-worker
+      # RabbitMQ worker 병렬성은 MVP에서 1로 고정
+      CAMPAIGN_WORKER_CONCURRENCY: "1"
+      CAMPAIGN_WORKER_LANE_STRATEGY: campaign-id
+
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: mec-nginx
+    ports:
+      - "8080:80"
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - api-1
+      - api-2
+      - api-3
+    networks:
+      - mec-net
+    healthcheck:
+      test: ["CMD-SHELL", "nginx -t"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+networks:
+  mec-net:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
+  rabbitmq_data:

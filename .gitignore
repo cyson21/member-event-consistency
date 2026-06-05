@@ -1,0 +1,12 @@
+backend/target/
+web/node_modules/
+web/dist/
+.ai-runs/
+.DS_Store
+.idea/
+.vscode/
+.env
+.env.*
+!.env.example
+*.log
+*.tmp
