@@ -4,7 +4,8 @@
 
 Member Event Consistency is a backend-focused portfolio project for comparing practical consistency controls in member-centered event flows. It keeps the MVP to three scenarios and uses one Spring Boot backend, PostgreSQL, Redis, RabbitMQ, Outbox, and a React dashboard as the intended live stack.
 
-The current implementation has dependency-free scenario harnesses, report models, API shells, SQL/JDBC boundaries, dashboard fixtures, and verification records. Live Spring/Flyway/JDBC/RabbitMQ wiring is intentionally marked as pending until dependency bootstrap is available.
+The current implementation has dependency-free scenario harnesses, report models, API shells, SQL/JDBC boundaries, dashboard fixtures, and verification records. Live Spring/Flyway/JDBC/RabbitMQ wiring is validated through Testcontainers-based integration paths.
+Current state is more explicit: React dashboard evidence is fixture/static centered for reproducible replay, while Testcontainers live IT paths are now used for container-backed API validation.
 
 ## Problem
 
@@ -40,6 +41,7 @@ Kafka is excluded from the MVP because this project focuses on member-event cont
 - In-memory and SQL/JDBC report persistence boundaries.
 - Flyway V1 schema draft for member, point, reward, coupon, idempotency, outbox, lock, queue, and scenario result tables.
 - React dashboard fixtures aligned with current backend evidence.
+- `MvpLiveInfrastructureIT`와 `*DbConcurrencyIT` 계열 Testcontainers 통합 테스트로 PostgreSQL/Redis/RabbitMQ 기반 live stack 경로를 분리 검증한다.
 
 ## Verification Snapshot
 
@@ -47,8 +49,9 @@ Kafka is excluded from the MVP because this project focuses on member-event cont
 |---|---|
 | Backend self-contained Java checks | pass with JDK-only compile/run commands |
 | Docker Compose syntax | `docker compose -f infra/local/docker-compose.yml config -q` passes |
-| Maven tests | blocked until Spring Boot parent POM is available locally |
-| Frontend build/tests | blocked until `node_modules` exists |
+| Maven tests | local `mvn -f backend/pom.xml test` + dependency-free harness + Testcontainers IT path |
+| Frontend build/tests | fixture-backed dashboard check + local build prerequisites |
+| Testcontainers IT | dependency가 있어야 실행 가능한 PostgreSQL/Redis/RabbitMQ API/infra 경로 분리 증빙 |
 | StockRush boundary | unchanged |
 
 ## What This Demonstrates
@@ -61,9 +64,9 @@ Kafka is excluded from the MVP because this project focuses on member-event cont
 
 ## Next Work
 
-1. Bootstrap dependencies with explicit approval.
-2. Wire Spring MVC handlers to the existing API shells.
-3. Wire Flyway/JDBC repositories to PostgreSQL.
-4. Implement real RabbitMQ worker, retry, and DLQ flow for Coupon Campaign Issue.
-5. Run frontend build and browser verification.
-6. Keep Phase 2 parked until MVP evidence is live and verified.
+1. Keep fixture/static dashboard wording and Testcontainers live IT wording synchronized in README, one-pager, and interview guide.
+2. Convert the remaining high-value `main()` harnesses to direct JUnit assertions where that improves reviewer readability.
+3. Add a live dashboard/API wiring slice only if a future portfolio review needs interactive backend-backed UI evidence.
+4. Keep Phase 2 parked until MVP evidence (fixture/static + live IT 분리)이 모두 정리되고 재현되도록 유지.
+
+- do-not-claim: 실서비스 성능, SLI/SLO 달성, 대규모 동시성 내성은 현재 문서 범위 밖이다.
