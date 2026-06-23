@@ -149,6 +149,7 @@ backend/              Spring Boot backend, scenario services, Flyway schema
 web/                  React dashboard
 infra/local/          PostgreSQL, Redis, RabbitMQ compose
 tools/runner/         verification suite, smoke dry-runs, guards
+docs/                 public portfolio docs and runbooks
 ```
 
 ## 문서 읽는 순서
@@ -156,7 +157,8 @@ tools/runner/         verification suite, smoke dry-runs, guards
 | 순서 | 문서 | 목적 |
 |---|---|---|
 | 1 | [Portfolio One-Pager](docs/portfolio/one-pager.md) | 포트폴리오 요약 |
-| 6 | [Runner README](tools/runner/README.md) | 로컬 검증 suite 구성 |
+| 2 | [Runner README](tools/runner/README.md) | 로컬 검증 suite 구성 |
+| 3 | [Local Infra README](infra/local/README.md) | PostgreSQL, Redis, RabbitMQ 로컬 구성 |
 
 ## 범위 밖
 
