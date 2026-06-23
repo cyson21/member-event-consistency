@@ -91,13 +91,16 @@ RABBITMQ_DB_GUARD
 
 Foundation code exists for the Spring Boot backend, React dashboard, local Compose stack, Flyway schema, MVP scenario harnesses, API route facade, SQL recording runner, and dependency-free verification suite.
 
-Local Spring/Flyway/JDBC/Redis/RabbitMQ smoke runs have been recorded for the MVP routes and selected Phase 2 routes. Those runs are local smoke evidence, not production performance proof, and some older notes still distinguish dependency-free SQL-recording evidence from live evidence.
-
-The review remediation track now prioritizes reproducible evidence over new scenario expansion. Docker-backed Testcontainers integration tests cover the First Login Reward unique constraint and Point Spend row-lock/non-negative-balance checks when Docker is available. Dependency-free SQL-recording remains useful for flow and fixture regression, but it is not labeled as live database measurement.
+- React dashboard is fixture/static-centered for portfolio replay and is kept as the baseline verification output.
+- Local Spring/Flyway/JDBC/Redis/RabbitMQ smoke runs are fixture/scenario-centered checks and are not presented as 운영 규모 실증.
+- Docker-backed Testcontainers integration is a separate live-infra path: `mvn -f backend/pom.xml -Dtest='*DbConcurrencyIT' test` and `MvpLiveInfrastructureIT` validate API behavior with PostgreSQL, Redis, and RabbitMQ containers when Docker is available. The command still scopes Docker via `TESTCONTAINERS_DOCKERCONFIG_SOURCE=autoIgnoringUserProperties` etc. (`TESTCONTAINERS_RYUK_DISABLED`, `DOCKER_HOST`, `api.version`) for reproducible local execution.
+- Dependency-free SQL-recording is kept as deterministic flow/fixture evidence. It does not substitute for live DB inference.
 
 `npm test` remains the broad local verification entrypoint. `mvn -f backend/pom.xml test` now also runs the 46 dependency-free Java harnesses through `DependencyFreeHarnessSuiteTest`, plus the direct JUnit tests. The Docker-backed DB concurrency tests run explicitly with `mvn -f backend/pom.xml -Dtest='*DbConcurrencyIT' test` and skip when Docker is unavailable. On the local Colima setup used for review closeout, the Testcontainers command passed by scoping Docker settings to the command: `TESTCONTAINERS_DOCKERCONFIG_SOURCE=autoIgnoringUserProperties TESTCONTAINERS_RYUK_DISABLED=true DOCKER_HOST=unix:///Users/chanyang.son/.colima/default/docker.sock env 'api.version=1.44' mvn -f backend/pom.xml -Dtest='*IT' test`.
 
 `.github/workflows/review-remediation.yml` promotes the Docker-backed `*IT` tests into CI with an Ubuntu runner and a Docker runtime check before the Testcontainers command. The `MvpLiveInfrastructureIT` route check starts PostgreSQL, Redis, and RabbitMQ containers and only accepts RabbitMQ route evidence after actuator health is `UP`. The same workflow also runs Maven regression, dashboard typecheck, and the dependency-free regression without relying on sibling local repos.
 
 For the live Spring RabbitMQ path, queue lag and RabbitMQ latency metrics are derived from queue-event lag snapshots recorded by the run tracker. The dependency-free dashboard and SQL-recording fixtures label their local comparison values as fixture baselines, not measured queue performance.
+
+- do-not-claim: 운영 규모 처리량·복원력은 현재 문서에서 보장되지 않으며, 실서비스 성능 증거는 별도 성능 테스트가 필요합니다.
 

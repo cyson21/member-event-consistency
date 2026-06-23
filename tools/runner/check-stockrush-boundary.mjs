@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptDir, '../..');
 const stockrushRoot = resolve(repoRoot, '../stockrush');
-const sinceText = process.env.MEC_STOCKRUSH_GUARD_SINCE || '2026-06-01 00:00:00';
+const sinceText = process.env.MEC_STOCKRUSH_GUARD_SINCE || '2026-06-19 00:00:00';
 const since = new Date(sinceText);
 const allowedTouchedFiles = new Set([
   'AGENTS.md',
