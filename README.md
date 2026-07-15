@@ -40,6 +40,20 @@ Reward commit      -> after-commit listener or Outbox follow-up
 
 Redis lock은 선택형 경합 제어로 구현되어 있지만, 실제 Redis에서 여러 프로세스가 경합할 때의 lock 동작이나 성능은 현재 검증 범위에 포함하지 않습니다.
 
+### 재현 가능한 검증 리포트
+
+`Review Remediation` workflow는 기본 회귀와 Testcontainers 통합 검증을 별도 job으로 실행하고, 각 job의 Maven Surefire/Failsafe XML 원본과 집계 JSON을 artifact로 보관합니다. JSON은 schema version, 프로젝트와 commit, UTC 생성 시각, 검증 범위, 전체 합계, 이름·소스 순으로 정렬된 suite 결과를 포함합니다. XML 입력이 없거나 깨졌거나 합계가 모순되면 리포트 생성도 실패합니다.
+
+현재 로컬 Maven 결과는 다음 명령으로 같은 형식의 JSON으로 변환할 수 있습니다.
+
+```bash
+python3 scripts/portfolio-evidence/generate_report.py \
+  --input 'backend/target/*-reports/TEST-*.xml' \
+  --output backend/target/portfolio-evidence/local.json \
+  --project member-event-consistency \
+  --scope local-current
+```
+
 ## 대표 코드와 테스트
 
 - 코드: [SqlRewardIssueRepository](backend/src/main/java/com/example/consistency/reward/SqlRewardIssueRepository.java) - 회원별 최초 보상 unique 제약과 포인트 상태 변경을 저장 경계에서 처리합니다.
