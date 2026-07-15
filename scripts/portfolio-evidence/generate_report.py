@@ -18,6 +18,7 @@ import xml.etree.ElementTree as ET
 
 SCHEMA_VERSION = 1
 COUNT_FIELDS = ("tests", "failures", "errors", "skipped")
+TESTCASE_STATUSES = frozenset(("failure", "error", "skipped"))
 
 
 class EvidenceError(ValueError):
@@ -75,7 +76,16 @@ def _derived_counts(element: ET.Element) -> dict[str, int]:
     counts["tests"] = len(testcases)
 
     for testcase in testcases:
-        statuses = {_local_name(child.tag) for child in testcase}
+        statuses = {
+            _local_name(child.tag)
+            for child in testcase
+            if _local_name(child.tag) in TESTCASE_STATUSES
+        }
+        if len(statuses) > 1:
+            testcase_name = testcase.get("name") or "<unnamed>"
+            raise EvidenceError(
+                f"testcase {testcase_name!r} has conflicting statuses: {sorted(statuses)}"
+            )
         if "error" in statuses:
             counts["errors"] += 1
         elif "failure" in statuses:
@@ -113,6 +123,15 @@ def _parse_suite(element: ET.Element, source: str) -> dict[str, object]:
         for field in COUNT_FIELDS
     }
 
+    if derived["tests"] > 0:
+        mismatches = [
+            f"{field} declared={counts[field]} derived={derived[field]}"
+            for field in COUNT_FIELDS
+            if counts[field] != derived[field]
+        ]
+        if mismatches:
+            raise EvidenceError(f"{context}: XML counts disagree with testcases: {', '.join(mismatches)}")
+
     non_passed = counts["failures"] + counts["errors"] + counts["skipped"]
     if non_passed > counts["tests"]:
         raise EvidenceError(
@@ -133,6 +152,9 @@ def _parse_suite(element: ET.Element, source: str) -> dict[str, object]:
 def parse_xml_report(path: Path, repo_root: Path) -> list[dict[str, object]]:
     source = _source_path(path, repo_root)
     try:
+        raw_xml = path.read_bytes()
+        if b"<!DOCTYPE" in raw_xml.upper():
+            raise EvidenceError(f"{source}: DOCTYPE declarations are not allowed")
         root = ET.parse(path).getroot()
     except (ET.ParseError, OSError) as exc:
         raise EvidenceError(f"cannot parse XML report {source}: {exc}") from exc
@@ -141,8 +163,13 @@ def parse_xml_report(path: Path, repo_root: Path) -> list[dict[str, object]]:
     if root_name == "testsuite":
         suite_elements = [root]
     elif root_name == "testsuites":
-        suite_elements = [
+        all_suite_elements = [
             element for element in root.iter() if _local_name(element.tag) == "testsuite"
+        ]
+        suite_elements = [
+            element
+            for element in all_suite_elements
+            if not any(_local_name(child.tag) == "testsuite" for child in element)
         ]
     else:
         raise EvidenceError(f"{source}: unsupported root element {root_name!r}")
@@ -157,6 +184,8 @@ def _validate_metadata(name: str, value: str) -> str:
     normalized = value.strip()
     if not normalized:
         raise EvidenceError(f"{name} must not be empty")
+    if any(ord(character) < 32 or ord(character) == 127 for character in normalized):
+        raise EvidenceError(f"{name} must not contain control characters")
     return normalized
 
 
@@ -196,8 +225,9 @@ def resolve_git_commit(repo_root: Path) -> str:
             check=True,
             capture_output=True,
             text=True,
+            timeout=5,
         )
-    except (OSError, subprocess.CalledProcessError) as exc:
+    except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
         raise EvidenceError("cannot resolve git commit; pass --git-commit explicitly") from exc
     return _validate_metadata("git_commit", result.stdout)
 
@@ -222,6 +252,8 @@ def build_report(
         field: sum(int(suite[field]) for suite in suites)
         for field in ("tests", "failures", "errors", "skipped", "passed")
     }
+    if totals["tests"] == 0:
+        raise EvidenceError("report contains no test cases")
 
     return {
         "schema_version": SCHEMA_VERSION,
@@ -254,6 +286,17 @@ def write_json_atomic(report: dict[str, object], output_path: Path) -> None:
     except BaseException:
         temporary_path.unlink(missing_ok=True)
         raise
+
+
+def resolve_output_path(output: str, repo_root: Path) -> Path:
+    output_path = Path(output)
+    if not output_path.is_absolute():
+        output_path = repo_root / output_path
+    try:
+        output_path.resolve().relative_to(repo_root.resolve())
+    except ValueError as exc:
+        raise EvidenceError(f"output is outside repo root: {output}") from exc
+    return output_path
 
 
 def create_argument_parser() -> argparse.ArgumentParser:
@@ -299,9 +342,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             generated_at_utc=args.generated_at_utc or current_utc_timestamp(),
             scope=args.scope,
         )
-        output_path = Path(args.output)
-        if not output_path.is_absolute():
-            output_path = repo_root / output_path
+        output_path = resolve_output_path(args.output, repo_root)
         write_json_atomic(report, output_path)
     except (EvidenceError, OSError) as exc:
         print(f"error: {exc}", file=sys.stderr)

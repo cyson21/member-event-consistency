@@ -1,13 +1,26 @@
 name: Review Remediation
 
 on:
+  workflow_dispatch:
   pull_request:
   push:
     branches:
       - main
 
+permissions:
+  contents: read
+
+concurrency:
+  group: review-remediation-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
 jobs:
   testcontainers-integration:
+    name: Testcontainers integration (Java 17)
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
@@ -26,11 +39,22 @@ jobs:
         run: docker info
 
       - name: Run Docker-backed integration tests
-        run: mvn -f backend/pom.xml -Dtest='*IT' test
+        run: mvn --batch-mode --no-transfer-progress -f backend/pom.xml -Dtest='*IT' test
+
+      - name: Print Testcontainers failure diagnostics
+        if: ${{ failure() }}
+        run: |
+          if [[ -d backend/target ]]; then
+            find backend/target -type f \( -name '*.txt' -o -name '*.dump' -o -name '*.dumpstream' \) \
+              -print -exec tail -n 120 {} \;
+          else
+            echo '::warning::backend/target was not created; inspect the Docker and Maven steps above.'
+          fi
 
       - name: Generate Testcontainers evidence report
-        if: ${{ always() }}
+        if: ${{ !cancelled() }}
         run: |
+          set -euo pipefail
           SOURCE_DATE_EPOCH="$(git show -s --format=%ct "$GITHUB_SHA")" \
           python3 scripts/portfolio-evidence/generate_report.py \
             --input 'backend/target/*-reports/TEST-*.xml' \
@@ -40,7 +64,7 @@ jobs:
             --git-commit "$GITHUB_SHA"
 
       - name: Upload Testcontainers evidence
-        if: ${{ always() }}
+        if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
           name: testcontainers-integration-evidence
@@ -49,8 +73,10 @@ jobs:
             backend/target/failsafe-reports/*.xml
             backend/target/portfolio-evidence/testcontainers-integration.json
           if-no-files-found: error
+          retention-days: 14
 
   standard-regression:
+    name: Standard regression (Java 17 / Node 22)
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
@@ -75,12 +101,26 @@ jobs:
       - name: Install dashboard dependencies
         run: npm ci --prefix web
 
+      - name: Verify evidence generator contract
+        run: python3 -m unittest discover -s scripts/portfolio-evidence -p 'test_*.py' -v
+
       - name: Run Maven regression
-        run: mvn -f backend/pom.xml test
+        run: mvn --batch-mode --no-transfer-progress -f backend/pom.xml test
+
+      - name: Print regression failure diagnostics
+        if: ${{ failure() }}
+        run: |
+          if [[ -d backend/target ]]; then
+            find backend/target -type f \( -name '*.txt' -o -name '*.dump' -o -name '*.dumpstream' \) \
+              -print -exec tail -n 120 {} \;
+          else
+            echo '::warning::backend/target was not created; inspect the Maven step above.'
+          fi
 
       - name: Generate unit and regression evidence report
-        if: ${{ always() }}
+        if: ${{ !cancelled() }}
         run: |
+          set -euo pipefail
           SOURCE_DATE_EPOCH="$(git show -s --format=%ct "$GITHUB_SHA")" \
           python3 scripts/portfolio-evidence/generate_report.py \
             --input 'backend/target/*-reports/TEST-*.xml' \
@@ -96,7 +136,7 @@ jobs:
         run: node tools/runner/check-dependency-free-regression.mjs
 
       - name: Upload unit and regression evidence
-        if: ${{ always() }}
+        if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
           name: standard-regression-evidence
@@ -105,3 +145,4 @@ jobs:
             backend/target/failsafe-reports/*.xml
             backend/target/portfolio-evidence/standard-regression.json
           if-no-files-found: error
+          retention-days: 14
