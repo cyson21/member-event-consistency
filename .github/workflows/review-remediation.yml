@@ -5,7 +5,6 @@ on:
   push:
     branches:
       - main
-      - 'feature/**'
 
 jobs:
   testcontainers-integration:
@@ -28,6 +27,28 @@ jobs:
 
       - name: Run Docker-backed integration tests
         run: mvn -f backend/pom.xml -Dtest='*IT' test
+
+      - name: Generate Testcontainers evidence report
+        if: ${{ always() }}
+        run: |
+          SOURCE_DATE_EPOCH="$(git show -s --format=%ct "$GITHUB_SHA")" \
+          python3 scripts/portfolio-evidence/generate_report.py \
+            --input 'backend/target/*-reports/TEST-*.xml' \
+            --output backend/target/portfolio-evidence/testcontainers-integration.json \
+            --project member-event-consistency \
+            --scope testcontainers-integration \
+            --git-commit "$GITHUB_SHA"
+
+      - name: Upload Testcontainers evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: testcontainers-integration-evidence
+          path: |
+            backend/target/surefire-reports/*.xml
+            backend/target/failsafe-reports/*.xml
+            backend/target/portfolio-evidence/testcontainers-integration.json
+          if-no-files-found: error
 
   standard-regression:
     runs-on: ubuntu-latest
@@ -57,8 +78,30 @@ jobs:
       - name: Run Maven regression
         run: mvn -f backend/pom.xml test
 
+      - name: Generate unit and regression evidence report
+        if: ${{ always() }}
+        run: |
+          SOURCE_DATE_EPOCH="$(git show -s --format=%ct "$GITHUB_SHA")" \
+          python3 scripts/portfolio-evidence/generate_report.py \
+            --input 'backend/target/*-reports/TEST-*.xml' \
+            --output backend/target/portfolio-evidence/standard-regression.json \
+            --project member-event-consistency \
+            --scope unit-regression \
+            --git-commit "$GITHUB_SHA"
+
       - name: Run dashboard typecheck
         run: npm --prefix web test
 
       - name: Run dependency-free regression
         run: node tools/runner/check-dependency-free-regression.mjs
+
+      - name: Upload unit and regression evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: standard-regression-evidence
+          path: |
+            backend/target/surefire-reports/*.xml
+            backend/target/failsafe-reports/*.xml
+            backend/target/portfolio-evidence/standard-regression.json
+          if-no-files-found: error
