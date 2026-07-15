@@ -13,10 +13,41 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class RedisRewardLockGatewayTest {
+
+    @Test
+    void rejectsInvalidMemberIdBeforeResolvingRedisLock() {
+        RedissonClient redissonClient = mock(RedissonClient.class);
+        RedisRewardLockGateway gateway = new RedisRewardLockGateway(redissonClient);
+
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> gateway.withRewardLock(-1L, () -> "ignored")
+        );
+
+        assertEquals("memberId must be positive", exception.getMessage());
+        assertEquals(0L, gateway.attemptCount());
+        verifyNoInteractions(redissonClient);
+    }
+
+    @Test
+    void rejectsNullOperationBeforeCountingAttempt() {
+        RedissonClient redissonClient = mock(RedissonClient.class);
+        RedisRewardLockGateway gateway = new RedisRewardLockGateway(redissonClient);
+
+        NullPointerException exception = assertThrows(
+                NullPointerException.class,
+                () -> gateway.withRewardLock(9101L, null)
+        );
+
+        assertEquals("operation must not be null", exception.getMessage());
+        assertEquals(0L, gateway.attemptCount());
+        verifyNoInteractions(redissonClient);
+    }
 
     @Test
     void watchdogManagedLockExecutesSupplierAndUnlocksWhenHeldByCurrentThread() throws InterruptedException {

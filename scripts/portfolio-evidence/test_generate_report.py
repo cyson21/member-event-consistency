@@ -91,6 +91,57 @@ class GenerateReportTest(unittest.TestCase):
 
         self.assertEqual([suite["name"] for suite in report["suites"]], ["First", "Second"])
 
+    def test_nested_aggregate_suite_does_not_double_count_leaf_suites(self) -> None:
+        report_path = self.write_xml(
+            "target/surefire-reports/TEST-nested.xml",
+            """<testsuites>
+                <testsuite name="Aggregate" tests="2" failures="0" errors="0" skipped="0">
+                    <testsuite name="First" tests="1" failures="0" errors="0" skipped="0">
+                        <testcase name="first"/>
+                    </testsuite>
+                    <testsuite name="Second" tests="1" failures="0" errors="0" skipped="0">
+                        <testcase name="second"/>
+                    </testsuite>
+                </testsuite>
+            </testsuites>""",
+        )
+
+        report = self.build_report([report_path])
+
+        self.assertEqual([suite["name"] for suite in report["suites"]], ["First", "Second"])
+        self.assertEqual(report["totals"]["tests"], 2)
+
+    def test_fails_when_declared_counts_disagree_with_testcases(self) -> None:
+        report_path = self.write_xml(
+            "target/surefire-reports/TEST-mismatch.xml",
+            """<testsuite name="Mismatch" tests="2" failures="0" errors="0" skipped="0">
+                <testcase name="only"/>
+            </testsuite>""",
+        )
+
+        with self.assertRaisesRegex(generate_report.EvidenceError, "counts disagree"):
+            self.build_report([report_path])
+
+    def test_fails_when_testcase_has_conflicting_statuses(self) -> None:
+        report_path = self.write_xml(
+            "target/surefire-reports/TEST-conflict.xml",
+            """<testsuite name="Conflict">
+                <testcase name="ambiguous"><failure/><skipped/></testcase>
+            </testsuite>""",
+        )
+
+        with self.assertRaisesRegex(generate_report.EvidenceError, "conflicting statuses"):
+            self.build_report([report_path])
+
+    def test_rejects_doctype_declaration(self) -> None:
+        report_path = self.write_xml(
+            "target/surefire-reports/TEST-doctype.xml",
+            '<!DOCTYPE testsuite [<!ENTITY value "x">]><testsuite name="Unsafe" tests="0"/>',
+        )
+
+        with self.assertRaisesRegex(generate_report.EvidenceError, "DOCTYPE"):
+            self.build_report([report_path])
+
     def test_discovers_surefire_and_failsafe_without_duplicate_paths(self) -> None:
         surefire = self.write_xml(
             "target/surefire-reports/TEST-unit.xml",
@@ -145,6 +196,37 @@ class GenerateReportTest(unittest.TestCase):
 
         with self.assertRaisesRegex(generate_report.EvidenceError, "unsupported root"):
             self.build_report([report_path])
+
+    def test_fails_when_report_contains_zero_testcases(self) -> None:
+        report_path = self.write_xml(
+            "target/surefire-reports/TEST-empty.xml",
+            '<testsuite name="Empty" tests="0" failures="0" errors="0" skipped="0"/>',
+        )
+
+        with self.assertRaisesRegex(generate_report.EvidenceError, "no test cases"):
+            self.build_report([report_path])
+
+    def test_rejects_metadata_control_characters(self) -> None:
+        report_path = self.write_xml(
+            "target/surefire-reports/TEST-unit.xml",
+            '<testsuite name="Unit" tests="1" failures="0" errors="0" skipped="0"/>',
+        )
+
+        with self.assertRaisesRegex(generate_report.EvidenceError, "control characters"):
+            generate_report.build_report(
+                [report_path],
+                repo_root=self.repo_root,
+                project="member-event-consistency\nspoofed",
+                git_commit="abc123",
+                generated_at_utc="2026-07-15T00:00:00Z",
+                scope="test",
+            )
+
+    def test_rejects_output_outside_repo_root(self) -> None:
+        outside = self.repo_root.parent / "outside.json"
+
+        with self.assertRaisesRegex(generate_report.EvidenceError, "outside repo root"):
+            generate_report.resolve_output_path(str(outside), self.repo_root)
 
     def test_cli_writes_stable_schema_and_key_order(self) -> None:
         self.write_xml(
