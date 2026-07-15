@@ -4,6 +4,10 @@ Member Event Consistency는 회원 보상, 쿠폰 발급, 포인트 차감처럼
 
 핵심 비교 대상은 최초 로그인 보상, 쿠폰 캠페인 발급, 포인트 사용 세 시나리오입니다. 로컬 실행 도구와 JUnit은 제어 방식별 결과를 비교하고, Testcontainers는 PostgreSQL 동시성 및 RabbitMQ 캠페인 경로를 실제 의존성으로 확인합니다.
 
+## 포트폴리오 링크
+
+- [웹 사례](https://cyson21.github.io/projects/member-event-consistency/) · [전체 포트폴리오 PDF](https://github.com/cyson21/portfolio-hub/releases/download/latest/portfolio-complete.pdf) · [최신 이력서](https://github.com/cyson21/portfolio-hub/releases/download/latest/resume.pdf)
+
 ## 한눈에 보기
 
 | 항목 | 내용 |
