@@ -120,7 +120,7 @@ public final class CouponCampaignRabbitMqRunTracker {
 
         private synchronized RabbitMqRunSnapshot awaitCompletion(Duration timeout) {
             long deadline = System.currentTimeMillis() + timeout.toMillis();
-            while (completed.size() < expectedCount && System.currentTimeMillis() < deadline) {
+            while (completed.size() + dlq.size() < expectedCount && System.currentTimeMillis() < deadline) {
                 long waitMs = Math.max(1L, deadline - System.currentTimeMillis());
                 try {
                     wait(waitMs);
