@@ -4,7 +4,7 @@ import com.example.consistency.reward.RewardLockGateway;
 import org.redisson.api.RLock;
 import org.redisson.api.RedissonClient;
 
-import java.util.concurrent.TimeUnit;
+import java.util.Objects;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Supplier;
 
@@ -17,30 +17,26 @@ public final class RedisRewardLockGateway implements RewardLockGateway {
     private volatile String lastLockKey = "";
 
     public RedisRewardLockGateway(RedissonClient redissonClient) {
-        this.redissonClient = redissonClient;
+        this.redissonClient = Objects.requireNonNull(redissonClient, "redissonClient must not be null");
     }
 
     @Override
     public <T> T withRewardLock(long memberId, Supplier<T> operation) {
+        if (memberId <= 0) {
+            throw new IllegalArgumentException("memberId must be positive");
+        }
+        Objects.requireNonNull(operation, "operation must not be null");
         String key = lockKey(memberId);
         attempts.incrementAndGet();
         lastLockKey = key;
         RLock lock = redissonClient.getLock(key);
-        boolean acquired = false;
-        try {
-            acquired = lock.tryLock(WAIT_MS, TimeUnit.MILLISECONDS);
-            if (!acquired) {
-                throw new IllegalStateException("Redis reward lock was not acquired before DB guard");
-            }
-            return operation.get();
-        } catch (InterruptedException exception) {
-            Thread.currentThread().interrupt();
-            throw new IllegalStateException("Interrupted while acquiring Redis reward lock", exception);
-        } finally {
-            if (acquired && lock.isHeldByCurrentThread()) {
-                lock.unlock();
-            }
-        }
+        return RedissonWatchdogLockExecutor.execute(
+                lock,
+                WAIT_MS,
+                operation,
+                "Redis reward lock was not acquired before DB guard",
+                "Interrupted while acquiring Redis reward lock"
+        );
     }
 
     @Override
@@ -53,7 +49,7 @@ public final class RedisRewardLockGateway implements RewardLockGateway {
         return lastLockKey;
     }
 
-    private String lockKey(long memberId) {
+    private static String lockKey(long memberId) {
         return "lock:first-login-reward:" + memberId;
     }
 }

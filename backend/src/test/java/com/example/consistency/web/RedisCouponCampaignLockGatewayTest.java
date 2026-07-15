@@ -13,10 +13,41 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class RedisCouponCampaignLockGatewayTest {
+
+    @Test
+    void rejectsInvalidCampaignIdBeforeResolvingRedisLock() {
+        RedissonClient redissonClient = mock(RedissonClient.class);
+        RedisCouponCampaignLockGateway gateway = new RedisCouponCampaignLockGateway(redissonClient);
+
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> gateway.withCampaignLock(0L, () -> "ignored")
+        );
+
+        assertEquals("campaignId must be positive", exception.getMessage());
+        assertEquals(0L, gateway.attemptCount());
+        verifyNoInteractions(redissonClient);
+    }
+
+    @Test
+    void rejectsNullOperationBeforeCountingAttempt() {
+        RedissonClient redissonClient = mock(RedissonClient.class);
+        RedisCouponCampaignLockGateway gateway = new RedisCouponCampaignLockGateway(redissonClient);
+
+        NullPointerException exception = assertThrows(
+                NullPointerException.class,
+                () -> gateway.withCampaignLock(101L, null)
+        );
+
+        assertEquals("operation must not be null", exception.getMessage());
+        assertEquals(0L, gateway.attemptCount());
+        verifyNoInteractions(redissonClient);
+    }
 
     @Test
     void watchdogManagedLockExecutesSupplierOnceAndUnlocksWhenHeldByCurrentThread() throws InterruptedException {
