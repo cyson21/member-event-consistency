@@ -4,8 +4,11 @@ import com.example.consistency.coupon.CouponCampaignDecision;
 
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -14,7 +17,14 @@ public final class CouponCampaignRabbitMqRunTracker {
     private final Map<UUID, RabbitMqRunState> runs = new ConcurrentHashMap<UUID, RabbitMqRunState>();
 
     void start(UUID operationId, int expectedCount) {
-        runs.put(operationId, new RabbitMqRunState(expectedCount));
+        Objects.requireNonNull(operationId, "operationId must not be null");
+        if (expectedCount <= 0) {
+            throw new IllegalArgumentException("expectedCount must be positive");
+        }
+        RabbitMqRunState existing = runs.putIfAbsent(operationId, new RabbitMqRunState(expectedCount));
+        if (existing != null) {
+            throw new IllegalStateException("RabbitMQ run already started: " + operationId);
+        }
     }
 
     boolean isActive(UUID operationId) {
@@ -50,6 +60,11 @@ public final class CouponCampaignRabbitMqRunTracker {
     }
 
     RabbitMqRunSnapshot awaitCompletion(UUID operationId, Duration timeout) {
+        Objects.requireNonNull(operationId, "operationId must not be null");
+        Objects.requireNonNull(timeout, "timeout must not be null");
+        if (timeout.isZero() || timeout.isNegative()) {
+            throw new IllegalArgumentException("timeout must be positive");
+        }
         RabbitMqRunState state = runs.get(operationId);
         if (state == null) {
             throw new IllegalArgumentException("RabbitMQ run not started: " + operationId);
@@ -86,6 +101,7 @@ public final class CouponCampaignRabbitMqRunTracker {
         private final List<RabbitMqQueueEvent> completed = new ArrayList<>();
         private final List<RabbitMqQueueEvent> retried = new ArrayList<>();
         private final List<RabbitMqQueueEvent> dlq = new ArrayList<>();
+        private final Set<String> terminalMessageIds = new HashSet<>();
         private long issuedCount;
         private long rejectedCount;
 
@@ -99,6 +115,9 @@ public final class CouponCampaignRabbitMqRunTracker {
         }
 
         private synchronized void recordCompleted(CouponCampaignRabbitMqCommand command, CouponCampaignDecision decision) {
+            if (!terminalMessageIds.add(command.messageId())) {
+                return;
+            }
             completed.add(new RabbitMqQueueEvent(command.messageId(), command.campaignId(), 0, command.lagMs()));
             if (decision.issued()) {
                 issuedCount++;
@@ -114,20 +133,39 @@ public final class CouponCampaignRabbitMqRunTracker {
         }
 
         private synchronized void recordDlq(String messageId, long campaignId, int retryCount, long lagMs) {
+            if (!terminalMessageIds.add(messageId)) {
+                return;
+            }
             dlq.add(new RabbitMqQueueEvent(messageId, campaignId, retryCount, lagMs));
             notifyAll();
         }
 
         private synchronized RabbitMqRunSnapshot awaitCompletion(Duration timeout) {
-            long deadline = System.currentTimeMillis() + timeout.toMillis();
-            while (completed.size() + dlq.size() < expectedCount && System.currentTimeMillis() < deadline) {
-                long waitMs = Math.max(1L, deadline - System.currentTimeMillis());
+            long remainingNanos;
+            try {
+                remainingNanos = timeout.toNanos();
+            } catch (ArithmeticException exception) {
+                throw new IllegalArgumentException("timeout is too large", exception);
+            }
+            while (terminalMessageIds.size() < expectedCount) {
+                if (remainingNanos <= 0) {
+                    throw new IllegalStateException(
+                            "RabbitMQ run timed out: expected=" + expectedCount
+                                    + ", terminal=" + terminalMessageIds.size()
+                                    + ", completed=" + completed.size()
+                                    + ", dlq=" + dlq.size()
+                    );
+                }
+                long waitStartedAt = System.nanoTime();
+                long waitMs = remainingNanos / 1_000_000L;
+                int waitNanos = (int) (remainingNanos % 1_000_000L);
                 try {
-                    wait(waitMs);
+                    wait(waitMs, waitNanos);
                 } catch (InterruptedException exception) {
                     Thread.currentThread().interrupt();
-                    break;
+                    throw new IllegalStateException("Interrupted while awaiting RabbitMQ run completion", exception);
                 }
+                remainingNanos -= Math.max(1L, System.nanoTime() - waitStartedAt);
             }
             return new RabbitMqRunSnapshot(
                     List.copyOf(accepted),

@@ -32,13 +32,13 @@ public final class CouponCampaignRabbitMqWorker {
             return;
         }
         if (command.transientFailureBudget() > 0) {
-            tracker.recordRetried(command.operationId(), command.messageId(), command.campaignId(), command.attempt() + 1, command.lagMs());
             publisher.publish(command.retriedCopy());
+            tracker.recordRetried(command.operationId(), command.messageId(), command.campaignId(), command.attempt() + 1, command.lagMs());
             return;
         }
         if (command.dlq()) {
-            tracker.recordDlq(command.operationId(), command.messageId(), command.campaignId(), command.attempt(), command.lagMs());
             publisher.publishDlq(command);
+            tracker.recordDlq(command.operationId(), command.messageId(), command.campaignId(), command.attempt(), command.lagMs());
             return;
         }
         CouponCampaignDecision decision = couponCampaignService.issue(new CouponCampaignCommand(
