@@ -11,7 +11,6 @@ import java.util.function.Supplier;
 public final class RedisCouponCampaignLockGateway implements CouponCampaignLockGateway {
 
     private static final long WAIT_MS = 100;
-    private static final long LEASE_MS = 5_000;
 
     private final RedissonClient redissonClient;
     private final AtomicLong attempts = new AtomicLong();
@@ -29,7 +28,7 @@ public final class RedisCouponCampaignLockGateway implements CouponCampaignLockG
         RLock lock = redissonClient.getLock(key);
         boolean acquired = false;
         try {
-            acquired = lock.tryLock(WAIT_MS, LEASE_MS, TimeUnit.MILLISECONDS);
+            acquired = lock.tryLock(WAIT_MS, TimeUnit.MILLISECONDS);
             if (!acquired) {
                 throw new IllegalStateException("Redis coupon campaign lock was not acquired before DB guard");
             }

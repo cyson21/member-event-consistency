@@ -71,5 +71,100 @@ class InvariantCheckerTest {
         assertThat(result.passed()).isFalse();
         assertThat(result.message()).contains("negative balance");
     }
-}
 
+    @Test
+    void pointSpendFailsWhenDoubleUseExists() {
+        InvariantResult result = InvariantChecker.evaluate(new InvariantResult(
+                ScenarioType.POINT_SPEND,
+                StrategyType.DB_GUARD,
+                true,
+                0,
+                0,
+                0,
+                1,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                "seed"
+        ));
+
+        assertThat(result.passed()).isFalse();
+        assertThat(result.message()).contains("double use count must stay zero");
+    }
+
+    @Test
+    void pointSpendFailsWhenTerminalStateConflictExists() {
+        InvariantResult result = InvariantChecker.evaluate(new InvariantResult(
+                ScenarioType.POINT_SPEND,
+                StrategyType.DB_GUARD,
+                true,
+                0,
+                0,
+                0,
+                0,
+                1,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                "seed"
+        ));
+
+        assertThat(result.passed()).isFalse();
+        assertThat(result.message()).contains("terminal state conflict count must stay zero");
+    }
+
+    @Test
+    void asyncScenarioFailsWhenCompletedCountExceedsAcceptedCount() {
+        InvariantResult result = InvariantChecker.evaluate(new InvariantResult(
+                ScenarioType.POINT_SPEND,
+                StrategyType.RABBITMQ_DB_GUARD,
+                true,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                1,
+                2,
+                0,
+                0,
+                0,
+                "seed"
+        ));
+
+        assertThat(result.passed()).isFalse();
+        assertThat(result.message()).contains("completed count cannot exceed accepted count");
+    }
+
+    @Test
+    void checkerPreservesCustomMessageWhenNoViolation() {
+        InvariantResult result = InvariantChecker.evaluate(new InvariantResult(
+                ScenarioType.POINT_SPEND,
+                StrategyType.DB_GUARD,
+                true,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                "all invariants stayed within threshold"
+        ));
+
+        assertThat(result.passed()).isTrue();
+        assertThat(result.message()).isEqualTo("all invariants stayed within threshold");
+    }
+}
