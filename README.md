@@ -2,9 +2,9 @@
 
 [![CI](https://github.com/cyson21/member-event-consistency/actions/workflows/review-remediation.yml/badge.svg)](https://github.com/cyson21/member-event-consistency/actions/workflows/review-remediation.yml)
 
-최초 로그인 보상, 쿠폰 발급, 포인트 차감에 요청이 겹칠 때 업무 불변식을 어디에서 지킬지 비교하는 Java/Spring 프로젝트입니다.
+동시에 들어온 최초 보상·쿠폰 발급·포인트 차감 요청이 중복 지급, 초과 발급과 음수 잔액을 만들지 않도록 PostgreSQL을 최종 보호 경계로 구현한 Java/Spring 프로젝트입니다.
 
-개인 프로젝트로 시나리오 API, PostgreSQL 저장 경계, Redis 잠금, RabbitMQ 처리 경로와 동시성 검증을 직접 구현했습니다.
+개인 프로젝트로 Spring API, PostgreSQL 제약·행 잠금, Redis 잠금과 RabbitMQ 순차 처리 경로를 직접 설계·구현했습니다.
 
 [웹 사례](https://cyson21.github.io/projects/member-event-consistency/) · [전체 포트폴리오 PDF](https://github.com/cyson21/portfolio-hub/releases/download/latest/portfolio-complete.pdf) · [최신 이력서](https://github.com/cyson21/portfolio-hub/releases/download/latest/resume.pdf)
 
