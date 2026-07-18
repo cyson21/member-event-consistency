@@ -1,10 +1,16 @@
 # Member Event Consistency
 
-최초 로그인 보상, 쿠폰 발급, 포인트 차감에 요청이 겹칠 때 업무 불변식을 어디에서 지킬지 비교하는 Java/Spring 프로젝트입니다. [웹 사례](https://cyson21.github.io/projects/member-event-consistency/)
+[![CI](https://github.com/cyson21/member-event-consistency/actions/workflows/review-remediation.yml/badge.svg)](https://github.com/cyson21/member-event-consistency/actions/workflows/review-remediation.yml)
+
+최초 로그인 보상, 쿠폰 발급, 포인트 차감에 요청이 겹칠 때 업무 불변식을 어디에서 지킬지 비교하는 Java/Spring 프로젝트입니다.
+
+개인 프로젝트로 시나리오 API, PostgreSQL 저장 경계, Redis 잠금, RabbitMQ 처리 경로와 동시성 검증을 직접 구현했습니다.
+
+[웹 사례](https://cyson21.github.io/projects/member-event-consistency/) · [전체 포트폴리오 PDF](https://github.com/cyson21/portfolio-hub/releases/download/latest/portfolio-complete.pdf) · [최신 이력서](https://github.com/cyson21/portfolio-hub/releases/download/latest/resume.pdf)
 
 ## 문제
 
-하나의 전역 잠금은 서로 무관한 회원·캠페인 작업까지 직렬화합니다. 반대로 애플리케이션 검사만으로는 동시 insert와 재시도를 막기 어렵습니다. 업무 식별자별 제어를 적용하되 PostgreSQL 제약과 행 잠금을 최종 방어선으로 유지해야 합니다.
+하나의 전역 잠금은 서로 무관한 회원·캠페인 작업까지 순서대로 처리하게 만듭니다. 반대로 애플리케이션 검사만으로는 동시 저장과 재시도를 막기 어렵습니다. 업무 식별자별로 경합을 제어하되 PostgreSQL 제약과 행 잠금을 최종 방어선으로 유지해야 합니다.
 
 ## 설계
 
@@ -12,12 +18,12 @@
 Concurrent requests -> Scenario service
                    -> PostgreSQL unique/check/FOR UPDATE/idempotency
                    -> optional Redisson lock by memberId or campaignId
-Campaign command   -> RabbitMQ -> single local worker -> PostgreSQL
+Campaign command   -> RabbitMQ -> 단일 로컬 처리자 -> PostgreSQL
 Reward commit      -> after-commit listener or Outbox follow-up
 ```
 
 - 보상은 `memberId`, 쿠폰은 `campaignId` 단위로 잠금 범위를 나눕니다.
-- 최초 보상은 unique 제약, 포인트는 행 잠금과 check 제약, 재전송은 idempotency record로 방어합니다.
+- 최초 보상은 고유 제약, 포인트는 행 잠금과 값 제약, 재전송은 멱등 처리 기록으로 방어합니다.
 - Redis와 RabbitMQ는 DB 앞의 선택형 경합 제어이며 정합성의 최종 근거는 PostgreSQL 상태입니다.
 
 ## 실패 조건
@@ -26,37 +32,17 @@ Reward commit      -> after-commit listener or Outbox follow-up
 |---|---|
 | 최초 로그인 요청 동시 도착 | 회원당 보상과 후속 처리는 한 번만 기록되어야 함 |
 | 인기 캠페인 동시 발급 | 회원당 1회, 캠페인 총수량 이하를 함께 만족해야 함 |
-| 포인트 사용 경합·재전송 | 잔액이 음수가 되지 않고 같은 key로 중복 차감되지 않아야 함 |
+| 포인트 사용 경합·재전송 | 잔액이 음수가 되지 않고 같은 멱등 키로 중복 차감되지 않아야 함 |
 | 쿠폰 사용과 만료 배치 경합 | 하나의 상태 전이만 성공해야 함 |
-| lock callback 예외·트랜잭션 rollback | lock을 해제하고 after-commit 후속 처리를 실행하지 않아야 함 |
+| 잠금 안에서 오류·트랜잭션 취소 | 잠금을 해제하고 커밋 이후 후속 처리를 실행하지 않아야 함 |
 
 ## 검증 결과
 
 | 검증 | 확인 결과 |
 |---|---|
-| PostgreSQL Testcontainers | 최초 보상 동시 insert의 unique 제약과 포인트 행 잠금·음수 잔액 check를 실제 DB에서 확인 |
-| RabbitMQ 통합 경로 | PostgreSQL·Redis·RabbitMQ를 기동하고 단일 worker의 캠페인 수량 정합성과 DLQ terminal 합산을 확인 |
+| PostgreSQL 통합 테스트 | 최초 보상 동시 저장의 고유 제약과 포인트 행 잠금·음수 잔액 방지를 실제 DB에서 확인 |
+| RabbitMQ 통합 경로 | PostgreSQL·Redis·RabbitMQ를 기동하고 단일 처리자의 캠페인 수량과 성공·실패 합계를 확인 |
 | 불변식 회귀 | `InvariantCheckerTest` 7건으로 보상·쿠폰·포인트 위반 판정을 확인 |
-
-Redis lock은 명시적 lease가 없는 Redisson `tryLock(waitTime, unit)` 호출로 watchdog 갱신 경로를 사용합니다. 단위 테스트는 이 호출 계약, 현재 스레드 소유권 확인, 예외 시 unlock과 interrupt 복원을 검증합니다. 실제 Redis에서 여러 프로세스가 경합할 때의 watchdog 갱신 주기·장애 복구·성능은 현재 검증 범위에 포함하지 않습니다.
-
-### 재현 가능한 검증 리포트
-
-`Review Remediation` workflow는 pull request, `main` push, 수동 실행에서 기본 회귀와 Testcontainers 통합 검증을 별도 job으로 실행합니다. 같은 ref의 이전 실행은 취소하고, 취소되지 않은 실행은 각 job의 Maven Surefire/Failsafe XML 원본과 집계 JSON을 14일간 artifact로 보관합니다. Java는 17, 대시보드 Node는 22로 고정합니다.
-
-JSON은 schema version, 프로젝트와 commit, UTC 생성 시각, 검증 범위, 전체 합계, 이름·소스 순으로 정렬된 leaf suite 결과를 포함합니다. Generator 자체 회귀 테스트도 CI에서 실행하며 XML 입력 누락, 파싱 실패, 선언 합계와 testcase 불일치, 중첩 suite 이중 집계, 0건 리포트를 실패로 처리합니다. 테스트 실패 시 Surefire/Failsafe 진단 파일을 먼저 출력한 뒤 생성 가능한 evidence를 보관합니다.
-
-현재 로컬 Maven 결과는 다음 명령으로 같은 형식의 JSON으로 변환할 수 있습니다.
-
-```bash
-python3 scripts/portfolio-evidence/generate_report.py \
-  --input 'backend/target/*-reports/TEST-*.xml' \
-  --output backend/target/portfolio-evidence/local.json \
-  --project member-event-consistency \
-  --scope local-current
-```
-
-동일 입력에서 byte 단위로 같은 JSON이 필요하면 `SOURCE_DATE_EPOCH=<epoch>` 또는 `--generated-at-utc YYYY-MM-DDTHH:MM:SSZ`를 지정합니다. CI는 대상 commit 시각을 `SOURCE_DATE_EPOCH`로 사용합니다. 출력 경로는 저장소 내부만 허용합니다.
 
 ## 대표 코드와 테스트
 
@@ -85,9 +71,9 @@ Compose 구성과 이미지 준비 조건은 [Local Infrastructure](infra/local/
 
 ## 제한 사항
 
-- 실제 Redis 다중 프로세스 경합, lock lease 만료, 장애 중 소유권 이전은 검증하지 않았습니다.
-- watchdog 사용은 Redisson API 호출 계약을 단위 테스트한 것이며, 장시간 작업 중 실제 lease 연장 성공을 측정한 결과가 아닙니다.
-- RabbitMQ worker 동시성 `1`은 로컬 캠페인 경로의 선택이며 일반적인 key 순서 보장이나 자동 partitioning을 의미하지 않습니다.
+- 실제 Redis 다중 프로세스 경합, 잠금 만료와 장애 중 소유권 이전은 검증하지 않았습니다.
+- Redisson 자동 연장 기능은 API 사용 방식을 단위 테스트한 것이며, 장시간 작업 중 실제 잠금 연장 성공을 측정한 결과가 아닙니다.
+- RabbitMQ 처리자 수 `1`은 로컬 캠페인 경로의 선택이며 일반적인 키 순서 보장이나 자동 분할 처리를 의미하지 않습니다.
 - Testcontainers 결과는 기능·정합성 검증이며 처리량, 지연시간, 고가용성, 운영 SLO 증거가 아닙니다.
 - 후속 쿠폰 사용·만료 경합은 서비스·SQL 회귀 범위이며 모든 경로가 실제 의존성 통합 테스트에 포함되지는 않습니다.
 - 외부 보상 제공자와 분산 트랜잭션 코디네이터는 구현하지 않았습니다.
