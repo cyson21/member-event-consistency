@@ -132,6 +132,19 @@ jobs:
       - name: Run dashboard typecheck
         run: npm --prefix web test
 
+      - name: Run dashboard production build
+        id: dashboard-build
+        run: npm --prefix web run build
+
+      - name: Upload dashboard build output on failure
+        if: ${{ failure() && steps.dashboard-build.outcome == 'failure' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: dashboard-build-output
+          path: web/dist
+          if-no-files-found: ignore
+          retention-days: 7
+
       - name: Run dependency-free regression
         run: node tools/runner/check-dependency-free-regression.mjs
 
