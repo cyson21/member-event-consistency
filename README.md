@@ -4,9 +4,9 @@
 
 동시에 들어온 최초 보상·쿠폰 발급·포인트 차감 요청이 중복 지급, 초과 발급과 음수 잔액을 만들지 않도록 PostgreSQL을 최종 보호 경계로 구현한 Java/Spring 프로젝트입니다.
 
-개인 프로젝트로 Spring API, PostgreSQL 제약·행 잠금, Redis 잠금과 RabbitMQ 순차 처리 경로를 직접 설계·구현했습니다.
+개인 프로젝트로 Spring API, PostgreSQL 제약·행 잠금, Redis 잠금과 RabbitMQ 경합 제어 경로를 직접 설계·구현했습니다. RabbitMQ 경로는 단일 Spring 인스턴스의 listener concurrency=1 범위에서 검증했으며, 전역 ordering이나 전역 single-consumer 보장을 의미하지 않습니다.
 
-[웹 사례](https://cyson21.github.io/projects/member-event-consistency/) · [전체 포트폴리오 PDF](https://github.com/cyson21/portfolio-hub/releases/download/latest/portfolio-complete.pdf) · [최신 이력서](https://github.com/cyson21/portfolio-hub/releases/download/latest/resume.pdf)
+[웹 사례](https://cyson21.github.io/projects/member-event-consistency/) · [최신 이력서](https://github.com/cyson21/portfolio-hub/releases/download/latest/resume.pdf)
 
 ## 문제
 
