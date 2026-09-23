@@ -2,17 +2,15 @@
 
 [![CI](https://github.com/cyson21/member-event-consistency/actions/workflows/review-remediation.yml/badge.svg)](https://github.com/cyson21/member-event-consistency/actions/workflows/review-remediation.yml)
 
-동시에 들어온 최초 보상·쿠폰 발급·포인트 차감 요청이 중복 지급, 초과 발급과 음수 잔액을 만들지 않도록 PostgreSQL을 최종 보호 경계로 구현한 Java/Spring 프로젝트입니다.
+첫 로그인 보상, 쿠폰 발급, 포인트 차감 요청이 동시에 몰려도 보상이 두 번 나가거나, 쿠폰이 수량보다 많이 나가거나, 포인트가 마이너스가 되지 않게 만든 Java/Spring 프로젝트입니다. 마지막 방어선은 PostgreSQL에 두고, Redis 잠금과 RabbitMQ를 그 앞에 붙여 비교했습니다. 설계부터 구현, 테스트까지 혼자 진행한 개인 프로젝트입니다.
 
-개인 프로젝트로 Spring API, PostgreSQL 제약·행 잠금, Redis 잠금과 RabbitMQ 경합 제어 경로를 직접 설계·구현했습니다. RabbitMQ 경로는 단일 Spring 인스턴스의 listener concurrency=1 범위에서 검증했으며, 전역 ordering이나 전역 single-consumer 보장을 의미하지 않습니다.
+[포트폴리오](https://cyson21.github.io/projects/member-event-consistency/) · [이력서](https://github.com/cyson21/portfolio-hub/releases/download/latest/resume.pdf)
 
-[웹 사례](https://cyson21.github.io/projects/member-event-consistency/) · [최신 이력서](https://github.com/cyson21/portfolio-hub/releases/download/latest/resume.pdf)
+## 풀려던 문제
 
-## 문제
+락 하나로 전부 줄 세우면, 서로 상관없는 회원이나 캠페인 작업까지 같이 기다리게 됩니다. 반대로 애플리케이션 코드에서 `if`로 확인만 하면 동시에 들어온 저장이나 재시도를 막지 못합니다. 그래서 잠금은 회원, 캠페인 단위로 좁히고, 최종 확인은 PostgreSQL 제약과 행 잠금에 맡겼습니다.
 
-하나의 전역 잠금은 서로 무관한 회원·캠페인 작업까지 순서대로 처리하게 만듭니다. 반대로 애플리케이션 검사만으로는 동시 저장과 재시도를 막기 어렵습니다. 업무 식별자별로 경합을 제어하되 PostgreSQL 제약과 행 잠금을 최종 방어선으로 유지해야 합니다.
-
-## 설계
+## 구조
 
 ```text
 Concurrent requests -> Scenario service
@@ -22,58 +20,61 @@ Campaign command   -> RabbitMQ -> 단일 로컬 처리자 -> PostgreSQL
 Reward commit      -> after-commit listener or Outbox follow-up
 ```
 
-- 보상은 `memberId`, 쿠폰은 `campaignId` 단위로 잠금 범위를 나눕니다.
-- 최초 보상은 고유 제약, 포인트는 행 잠금과 값 제약, 재전송은 멱등 처리 기록으로 방어합니다.
-- Redis와 RabbitMQ는 DB 앞의 선택형 경합 제어이며 정합성의 최종 근거는 PostgreSQL 상태입니다.
+- 보상은 `memberId`, 쿠폰은 `campaignId` 단위로 잠급니다.
+- 첫 로그인 보상은 유니크 제약, 포인트는 행 잠금과 CHECK 제약, 재전송은 멱등 키 기록으로 막습니다.
+- Redis와 RabbitMQ는 DB 부담을 덜어 주는 선택 사항입니다. 데이터가 맞는지는 결국 PostgreSQL이 판단합니다.
+- RabbitMQ 경로는 Spring 인스턴스 하나에서 listener concurrency=1로만 확인했습니다. 여러 인스턴스에 걸친 순서 보장은 아닙니다.
 
-## 실패 조건
+## 실패 상황별 결과
 
-| 조건 | 보호 규칙 |
+| 상황 | 결과 |
 |---|---|
-| 최초 로그인 요청 동시 도착 | 회원당 보상과 후속 처리는 한 번만 기록되어야 함 |
-| 인기 캠페인 동시 발급 | 회원당 1회, 캠페인 총수량 이하를 함께 만족해야 함 |
-| 포인트 사용 경합·재전송 | 잔액이 음수가 되지 않고 같은 멱등 키로 중복 차감되지 않아야 함 |
-| 쿠폰 사용과 만료 배치 경합 | 하나의 상태 전이만 성공해야 함 |
-| 잠금 안에서 오류·트랜잭션 취소 | 잠금을 해제하고 커밋 이후 후속 처리를 실행하지 않아야 함 |
+| 첫 로그인 요청이 동시에 도착 | 보상과 후속 처리가 회원당 한 번만 기록됩니다 |
+| 인기 캠페인에 동시 발급 요청 | 회원당 1장, 캠페인 전체 수량 이하로만 나갑니다 |
+| 포인트 사용이 겹치거나 재전송됨 | 잔액이 마이너스가 되지 않고, 같은 멱등 키로 두 번 빠지지 않습니다 |
+| 쿠폰 사용과 만료 배치가 겹침 | 둘 중 하나만 성공합니다 |
+| 잠금 안에서 오류가 나 트랜잭션이 취소됨 | 잠금이 풀리고, 커밋 뒤 후속 처리는 실행되지 않습니다 |
 
-## 검증 결과
+## 확인한 방법
 
-| 검증 | 확인 결과 |
+| 검증 | 확인한 내용 |
 |---|---|
-| PostgreSQL 통합 테스트 | 최초 보상 동시 저장의 고유 제약과 포인트 행 잠금·음수 잔액 방지를 실제 DB에서 확인 |
-| RabbitMQ 통합 경로 | PostgreSQL·Redis·RabbitMQ를 기동하고 단일 처리자의 캠페인 수량과 성공·실패 합계를 확인 |
-| 불변식 회귀 | `InvariantCheckerTest` 7건으로 보상·쿠폰·포인트 위반 판정을 확인 |
+| PostgreSQL 통합 테스트 | 첫 로그인 보상의 유니크 제약, 포인트 행 잠금과 마이너스 방지를 실제 DB에서 확인 |
+| RabbitMQ 통합 경로 | PostgreSQL, Redis, RabbitMQ를 띄우고 캠페인 발급 수량과 성공, 실패 합계를 확인 |
+| 규칙 위반 검사 | `InvariantCheckerTest` 7건으로 보상, 쿠폰, 포인트 규칙 위반을 잡는지 확인 |
 
 ## 대표 코드와 테스트
 
-- 코드: [SqlRewardIssueRepository](backend/src/main/java/com/example/consistency/reward/SqlRewardIssueRepository.java) - 회원별 최초 보상 unique 제약과 포인트 상태 변경을 저장 경계에서 처리합니다.
-- 테스트: [FirstLoginRewardDbConcurrencyIT](backend/src/test/java/com/example/consistency/integration/FirstLoginRewardDbConcurrencyIT.java) - 동시 최초 보상 요청이 실제 PostgreSQL에서 한 건으로 수렴하는지 검증합니다.
+- 코드: [SqlRewardIssueRepository](backend/src/main/java/com/example/consistency/reward/SqlRewardIssueRepository.java) - 회원별 첫 로그인 보상의 유니크 제약과 포인트 변경을 저장소에서 처리합니다.
+- 테스트: [FirstLoginRewardDbConcurrencyIT](backend/src/test/java/com/example/consistency/integration/FirstLoginRewardDbConcurrencyIT.java) - 동시에 들어온 첫 로그인 보상 요청이 실제 PostgreSQL에서 한 건만 남는지 확인합니다.
 
 ## 실행
 
-CI와 같은 결과를 재현하려면 Java 17과 Maven이 필요합니다. 기본 회귀와 실제 의존성 검증을 분리합니다. 최신 JDK에서 Mockito/Byte Buddy 호환성이 달라질 수 있으므로 로컬에서도 `JAVA_HOME`을 17로 맞춥니다.
+CI와 같은 결과를 보려면 Java 17과 Maven이 필요합니다. 최신 JDK에서는 Mockito, Byte Buddy 호환성이 달라질 수 있어서 로컬에서도 `JAVA_HOME`을 17로 맞춥니다.
 
 ```bash
 mvn -f backend/pom.xml test
 ```
 
+실제 의존성을 띄우는 테스트는 따로 돌립니다.
+
 ```bash
 mvn -f backend/pom.xml -Dtest='*IT' test
 ```
 
-`*IT`는 Docker가 없으면 건너뛸 수 있으므로 Maven 요약에서 실행 4건, `Skipped: 0`을 확인합니다. 의존성 없는 시나리오 비교는 다음 명령으로 실행합니다.
+`*IT`는 Docker가 없으면 건너뛰기 때문에, Maven 요약에서 4건 실행, `Skipped: 0`인지 확인합니다. 외부 의존성 없이 시나리오를 비교하려면 다음을 실행합니다.
 
 ```bash
 node tools/runner/check-dependency-free-regression.mjs
 ```
 
-Compose 구성과 이미지 준비 조건은 [Local Infrastructure](infra/local/README.md)를 따릅니다.
+Compose 구성과 이미지 준비는 [Local Infrastructure](infra/local/README.md)에 있습니다.
 
-## 제한 사항
+## 해 보지 않은 것
 
-- 실제 Redis 다중 프로세스 경합, 잠금 만료와 장애 중 소유권 이전은 검증하지 않았습니다.
-- Redisson 자동 연장 기능은 API 사용 방식을 단위 테스트한 것이며, 장시간 작업 중 실제 잠금 연장 성공을 측정한 결과가 아닙니다.
-- RabbitMQ 처리자 수 `1`은 로컬 캠페인 경로의 선택이며 일반적인 키 순서 보장이나 자동 분할 처리를 의미하지 않습니다.
-- Testcontainers 결과는 기능·정합성 검증이며 처리량, 지연시간, 고가용성, 운영 SLO 증거가 아닙니다.
-- 후속 쿠폰 사용·만료 경합은 서비스·SQL 회귀 범위이며 모든 경로가 실제 의존성 통합 테스트에 포함되지는 않습니다.
-- 외부 보상 제공자와 분산 트랜잭션 코디네이터는 구현하지 않았습니다.
+- 여러 프로세스에서 실제 Redis 잠금을 두고 경쟁하는 상황, 잠금 만료나 장애 중 소유권이 넘어가는 상황은 확인하지 않았습니다.
+- Redisson 자동 연장은 API를 제대로 호출하는지만 단위 테스트했습니다. 오래 걸리는 작업에서 실제로 연장되는지는 재 보지 않았습니다.
+- RabbitMQ 처리자를 1개로 둔 건 로컬 캠페인 경로에서의 선택입니다. 키별 순서 보장이나 자동 분할 처리는 아닙니다.
+- Testcontainers 테스트는 결과가 맞는지 보는 용도입니다. 처리량, 지연 시간, 고가용성은 재지 않았습니다.
+- 쿠폰 사용과 만료가 겹치는 경우는 서비스, SQL 테스트로만 확인했고, 모든 경로를 실제 의존성으로 돌려 보지는 않았습니다.
+- 외부 보상 시스템 연동과 분산 트랜잭션은 구현하지 않았습니다.
