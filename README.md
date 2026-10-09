@@ -4,7 +4,7 @@
 
 첫 로그인 보상, 쿠폰 발급, 포인트 차감 요청이 동시에 몰려도 보상이 두 번 나가거나, 쿠폰이 수량보다 많이 나가거나, 포인트가 마이너스가 되지 않게 만든 Java/Spring 프로젝트입니다. 마지막 방어선은 PostgreSQL에 두고, Redis 잠금과 RabbitMQ를 그 앞에 붙여 비교했습니다. 설계부터 구현, 테스트까지 혼자 진행한 개인 프로젝트입니다.
 
-[포트폴리오](https://cyson21.github.io/projects/member-event-consistency/) · [이력서](https://github.com/cyson21/portfolio-hub/releases/download/latest/resume.pdf)
+[포트폴리오](https://cyson21.github.io/projects/member-event-consistency/) · [이력서](https://cyson21.github.io/downloads/resume.pdf)
 
 ## 풀려던 문제
 
@@ -78,3 +78,12 @@ Compose 구성과 이미지 준비는 [Local Infrastructure](infra/local/README.
 - Testcontainers 테스트는 결과가 맞는지 보는 용도입니다. 처리량, 지연 시간, 고가용성은 재지 않았습니다.
 - 쿠폰 사용과 만료가 겹치는 경우는 서비스, SQL 테스트로만 확인했고, 모든 경로를 실제 의존성으로 돌려 보지는 않았습니다.
 - 외부 보상 시스템 연동과 분산 트랜잭션은 구현하지 않았습니다.
+
+## 관련 프로젝트와 공개 자료
+
+이 저장소의 코드·실행·테스트는 이 저장소에서 관리합니다. [웹 포트폴리오의 프로젝트 설명](https://cyson21.github.io/projects/member-event-consistency/)과 [공개 자료 안내](https://github.com/cyson21/portfolio-hub)는 외부에서 구현 근거를 찾는 진입점입니다.
+
+- 관련 주제: [stockrush](https://github.com/cyson21/stockrush) — 분산 주문 상태·Outbox·복구 비교.
+- 최신 제출 파일: [이력서 PDF](https://cyson21.github.io/downloads/resume.pdf) · [경력기술서 PDF](https://cyson21.github.io/downloads/career-description.pdf).
+
+위 관련 저장소는 별도로 실행하는 개인 프로젝트입니다. 서로의 서비스를 순서대로 띄우거나 실제 API·메시지로 연결한 E2E 체인이 구현됐다는 의미는 아닙니다. 구현·검증 범위가 바뀌면 이 README와 웹 프로젝트 문안을 함께 확인합니다.
