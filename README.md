@@ -2,9 +2,13 @@
 
 [![CI](https://github.com/cyson21/member-event-consistency/actions/workflows/review-remediation.yml/badge.svg)](https://github.com/cyson21/member-event-consistency/actions/workflows/review-remediation.yml)
 
-첫 로그인 보상, 쿠폰 발급, 포인트 차감 요청이 동시에 몰려도 보상이 두 번 나가거나, 쿠폰이 수량보다 많이 나가거나, 포인트가 마이너스가 되지 않게 만든 Java/Spring 프로젝트입니다. 마지막 방어선은 PostgreSQL에 두고, Redis 잠금과 RabbitMQ를 그 앞에 붙여 비교했습니다. 설계부터 구현, 테스트까지 혼자 진행한 개인 프로젝트입니다.
+첫 로그인 보상, 포인트 차감, 한정 수량 쿠폰에 동시 요청을 보내 데이터가 어떻게 남는지 확인하는 Java/Spring 프로젝트입니다. 첫 로그인 보상의 중복 지급은 PostgreSQL 유니크 제약으로 막고, 포인트 차감에는 행 잠금과 잔액 `CHECK` 제약을 적용했습니다.
 
-[포트폴리오](https://cyson21.github.io/projects/member-event-consistency/) · [이력서](https://cyson21.github.io/downloads/resume.pdf)
+- **PostgreSQL** — 같은 회원에게 보상 요청이 동시에 들어와도 지급 기록은 한 건만 남습니다. 한 건만 감당할 수 있는 잔액에 차감 요청 두 건을 보내 한 건만 처리되는지도 확인합니다. [보상 구현](backend/src/main/java/com/example/consistency/reward/SqlRewardIssueRepository.java) · [보상 테스트](backend/src/test/java/com/example/consistency/integration/FirstLoginRewardDbConcurrencyIT.java) · [포인트 테스트](backend/src/test/java/com/example/consistency/integration/PointSpendDbConcurrencyIT.java)
+- **Redis** — 실제 Redis 컨테이너와 별도 Redisson 클라이언트를 사용해, 작업이 watchdog 만료 시간을 넘겨도 같은 키를 다른 클라이언트가 가져갈 수 없는지 확인합니다. [보상 잠금 테스트](backend/src/test/java/com/example/consistency/integration/RedisRewardLockIntegrationIT.java) · [캠페인 잠금 테스트](backend/src/test/java/com/example/consistency/integration/RedisCouponCampaignLockIntegrationIT.java)
+- **RabbitMQ** — 단일 워커를 띄운 테스트에서 수량 3장에 요청 8건을 보내 3건 발급, 5건 거절, 초과 발급 0건을 확인합니다. [캠페인 통합 테스트](backend/src/test/java/com/example/consistency/integration/MvpLiveInfrastructureIT.java)
+
+RabbitMQ 결과는 단일 워커의 발급 시나리오에 해당합니다.
 
 ## 풀려던 문제
 
@@ -43,11 +47,6 @@ Reward commit      -> after-commit listener or Outbox follow-up
 | RabbitMQ 통합 경로 | PostgreSQL, Redis, RabbitMQ를 띄우고 캠페인 발급 수량과 성공, 실패 합계를 확인 |
 | 규칙 위반 검사 | `InvariantCheckerTest` 7건으로 보상, 쿠폰, 포인트 규칙 위반을 잡는지 확인 |
 
-## 대표 코드와 테스트
-
-- 코드: [SqlRewardIssueRepository](backend/src/main/java/com/example/consistency/reward/SqlRewardIssueRepository.java) - 회원별 첫 로그인 보상의 유니크 제약과 포인트 변경을 저장소에서 처리합니다.
-- 테스트: [FirstLoginRewardDbConcurrencyIT](backend/src/test/java/com/example/consistency/integration/FirstLoginRewardDbConcurrencyIT.java) - 동시에 들어온 첫 로그인 보상 요청이 실제 PostgreSQL에서 한 건만 남는지 확인합니다.
-
 ## 실행
 
 CI와 같은 결과를 보려면 Java 17과 Maven이 필요합니다. 최신 JDK에서는 Mockito, Byte Buddy 호환성이 달라질 수 있어서 로컬에서도 `JAVA_HOME`을 17로 맞춥니다.
@@ -62,7 +61,7 @@ mvn -f backend/pom.xml test
 mvn -f backend/pom.xml -Dtest='*IT' test
 ```
 
-`*IT`는 Docker가 없으면 건너뛰기 때문에, Maven 요약에서 4건 실행, `Skipped: 0`인지 확인합니다. 외부 의존성 없이 시나리오를 비교하려면 다음을 실행합니다.
+`*IT`는 Docker가 없으면 건너뛰기 때문에, Maven 요약에서 테스트가 실행됐고 `Skipped: 0`인지 확인합니다. 외부 의존성 없이 시나리오를 비교하려면 다음을 실행합니다.
 
 ```bash
 node tools/runner/check-dependency-free-regression.mjs
@@ -72,18 +71,10 @@ Compose 구성과 이미지 준비는 [Local Infrastructure](infra/local/README.
 
 ## 해 보지 않은 것
 
-- 여러 프로세스에서 실제 Redis 잠금을 두고 경쟁하는 상황, 잠금 만료나 장애 중 소유권이 넘어가는 상황은 확인하지 않았습니다.
-- Redisson 자동 연장은 API를 제대로 호출하는지만 단위 테스트했습니다. 오래 걸리는 작업에서 실제로 연장되는지는 재 보지 않았습니다.
+- Redis 잠금 통합 테스트는 한 JVM 안의 별도 클라이언트로 실행합니다. 여러 애플리케이션 프로세스의 경쟁이나 Redis 장애 전환은 검증 범위 밖입니다.
 - RabbitMQ 처리자를 1개로 둔 건 로컬 캠페인 경로에서의 선택입니다. 키별 순서 보장이나 자동 분할 처리는 아닙니다.
 - Testcontainers 테스트는 결과가 맞는지 보는 용도입니다. 처리량, 지연 시간, 고가용성은 재지 않았습니다.
 - 쿠폰 사용과 만료가 겹치는 경우는 서비스, SQL 테스트로만 확인했고, 모든 경로를 실제 의존성으로 돌려 보지는 않았습니다.
 - 외부 보상 시스템 연동과 분산 트랜잭션은 구현하지 않았습니다.
 
-## 관련 프로젝트와 공개 자료
-
-이 저장소의 코드·실행·테스트는 이 저장소에서 관리합니다. [웹 포트폴리오의 프로젝트 설명](https://cyson21.github.io/projects/member-event-consistency/)에서 구현 근거를, [공개 웹사이트](https://cyson21.github.io/)에서 전체 공개 자료를 확인할 수 있습니다.
-
-- 관련 주제: [stockrush](https://github.com/cyson21/stockrush) — 분산 주문 상태·Outbox·복구 비교.
-- 최신 제출 파일: [이력서 PDF](https://cyson21.github.io/downloads/resume.pdf) · [경력기술서 PDF](https://cyson21.github.io/downloads/career-description.pdf).
-
-위 관련 저장소는 별도로 실행하는 개인 프로젝트입니다. 서로의 서비스를 순서대로 띄우거나 실제 API·메시지로 연결한 E2E 체인이 구현됐다는 의미는 아닙니다. 구현·검증 범위가 바뀌면 이 README와 웹 프로젝트 문안을 함께 확인합니다.
+[웹 포트폴리오에서 프로젝트 상세 보기](https://cyson21.github.io/projects/member-event-consistency/)
